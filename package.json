@@ -1,0 +1,15 @@
+{
+  "name": "rptd-lgic",
+  "version": "1.0.0",
+  "description": "An extension for rptd-core that allows for ready logic gate systems from digital logic sim and convert them into ruptured logic gates",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "GhostToast.js",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samgcode/rptd-lgic.git"
+  }
+}
