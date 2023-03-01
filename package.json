@@ -1,6 +1,6 @@
 {
   "name": "rptd-lgic",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "An extension for rptd-core that allows for ready logic gate systems from digital logic sim and convert them into ruptured logic gates",
   "main": "index.js",
   "scripts": {
