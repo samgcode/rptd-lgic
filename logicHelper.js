@@ -112,18 +112,18 @@ function setChannels(level, gate) {
   }
 }
 
-function generateGates(level, gate) {
-    if(gate.name === "AND") level.addAndGate({ x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
-    if(gate.name === "OR") level.addOrGate({ x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
-    if(gate.name === "NOT") level.addNotGate({ x:0, y: 0, InChannel1: gate.inputChannel1, OutChannel1: gate.outputChannel })
-    if(gate.name === "XOR") level.addXorGate({ x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
+function generateGates(level, sectionId, gate) {
+    if(gate.name === "AND") level.addAndGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
+    if(gate.name === "OR") level.addOrGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
+    if(gate.name === "NOT") level.addNotGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, OutChannel1: gate.outputChannel })
+    if(gate.name === "XOR") level.addXorGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
 
-  if(gate.input1 != null) generateGates(level, gate.input1)
-  if(gate.input2 != null) generateGates(level, gate.input2)
+  if(gate.input1 != null) generateGates(level, sectionId, gate.input1)
+  if(gate.input2 != null) generateGates(level, sectionId, gate.input2)
 }
 
-function addGatesFromFile(level, pathToFile) {
-  const json = readFile(pathToFile)
+function addGatesFromFile({ level, sectionId, filePath }) {
+  const json = readFile(filePath)
   const data = reduce(json)
   const gates = parse(data)
   const tree = generateLogicTree(gates, data.connections)
@@ -131,7 +131,7 @@ function addGatesFromFile(level, pathToFile) {
   const outputChannels = []
   tree.forEach(head => {
     setChannels(level, head)
-    generateGates(level, head)
+    generateGates(level, sectionId, head)
     outputChannels.push(head.inputChannel1)
   })
 
