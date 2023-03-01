@@ -1,4 +1,4 @@
-# rptd-lgic `v1.0.2`
+# rptd-lgic `v1.0.3`
 
 rptd-lgic is an extension for [rptd-core](https://github.com/samgcode/rptd-lgic) that allows for reading logic gate systems from [digital logic sim](https://sebastian.itch.io/digital-logic-sim) and convert them into Ruptured logic gates
 

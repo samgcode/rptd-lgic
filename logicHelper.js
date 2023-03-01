@@ -98,9 +98,11 @@ function generateLogicTree(gates, connections) {
 }
 
 function setChannels(level, gate) {
-  if(!this.isOutput) {
-    gate.outputChannel = level.nextFreeChannel
-    level.channelsUsed[gate.outputChannel] = gate.outputChannel
+  if(!gate.isOutput) {
+    if(gate.outputChannel === -1) {
+      gate.outputChannel = level.nextFreeChannel
+      level.channelsUsed[gate.outputChannel] = gate.outputChannel
+    }
   }
   if(gate.input1 != null) {
     setChannels(level, gate.input1)
@@ -122,6 +124,15 @@ function generateGates(level, sectionId, gate) {
   if(gate.input2 != null) generateGates(level, sectionId, gate.input2)
 }
 
+function writeTreeToFIle(tree, file) {
+  let json = JSON.stringify(tree)
+
+  fs.writeFileSync(file, json, 'utf8', (err) => {
+    if(err) throw err
+  }); 
+  console.log("file write successful")
+}
+
 function addGatesFromFile({ level, sectionId, filePath }) {
   const json = readFile(filePath)
   const data = reduce(json)
@@ -139,6 +150,8 @@ function addGatesFromFile({ level, sectionId, filePath }) {
   gates.input.forEach(input => {
     inputChannels.push(input.outputChannel)
   })
+
+  writeTreeToFIle(tree, './json/logicTree.json')
 
   return {
     input: inputChannels,
