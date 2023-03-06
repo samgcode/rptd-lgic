@@ -115,17 +115,33 @@ function setChannels(level, gate) {
 }
 
 function generateGates(level, sectionId, gate) {
-    if(gate.name === "AND") level.addAndGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
-    if(gate.name === "OR") level.addOrGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
-    if(gate.name === "NOT") level.addNotGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, OutChannel1: gate.outputChannel })
-    if(gate.name === "XOR") level.addXorGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
+  addGate(level, sectionId, gate)
 
   if(gate.input1 != null) generateGates(level, sectionId, gate.input1)
   if(gate.input2 != null) generateGates(level, sectionId, gate.input2)
 }
 
-function writeTreeToFIle(tree, file) {
-  let json = JSON.stringify(tree)
+function addGate(level, sectionId, gate) {
+  if(gate.name === "AND" && !gate.added) {
+    level.addAndGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
+    gate.added = true
+  }
+  if(gate.name === "OR" && !gate.added) {
+    level.addOrGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
+    gate.added = true
+  }
+  if(gate.name === "NOT" && !gate.added) {
+    level.addNotGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, OutChannel1: gate.outputChannel })
+    gate.added = true
+  }
+  if(gate.name === "XOR" && !gate.added) {
+    level.addXorGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
+    gate.added = true
+  }
+}
+
+function writeTreeToFile(tree, file) {
+  let json = JSON.stringify(tree, null, 2)
 
   fs.writeFileSync(file, json, 'utf8', (err) => {
     if(err) throw err
@@ -139,19 +155,18 @@ function addGatesFromFile({ level, sectionId, filePath }) {
   const gates = parse(data)
   const tree = generateLogicTree(gates, data.connections)
 
+
   const outputChannels = []
-  tree.forEach(head => {
-    setChannels(level, head)
-    generateGates(level, sectionId, head)
-    outputChannels.push(head.inputChannel1)
+  tree.forEach(output => {
+    setChannels(level, output)
+    generateGates(level, sectionId, output)
+    outputChannels.push(output.inputChannel1)
   })
 
   const inputChannels = []
   gates.input.forEach(input => {
     inputChannels.push(input.outputChannel)
   })
-
-  writeTreeToFIle(tree, './json/logicTree.json')
 
   return {
     input: inputChannels,
