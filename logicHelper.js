@@ -1,5 +1,5 @@
 const fs = require('fs')
-const { AND, OR, NOT, XOR, INPUT, OUTPUT } = require('./logicGates')
+const { Chip, BaseChip } = require('./chips')
 
 function readFile(pathToFile) {
   let obj = fs.readFileSync(pathToFile, 'utf8', (err, data) => {
@@ -12,168 +12,190 @@ function readFile(pathToFile) {
   return obj
 }
 
-function reduce(json) {
-  const data = {
-    inputs: [],
-    gates: [],
-    connections: [],
-    outputs: []
-  }
-
-  json.InputPins.forEach(pin => {
-    data.inputs.push({ name: pin.Name, id: pin.ID })
-  })
-  
-  json.SubChips.forEach(gate => {
-    data.gates.push({ name: gate.Name, id: gate.ID })
-  })
-  
-  json.Connections.forEach(connection => {
-    data.connections.push({ 
-      from: (connection.Source.SubChipID != 0 ? connection.Source.SubChipID : connection.Source.PinID),
-      to: (connection.Target.SubChipID != 0 ? connection.Target.SubChipID : connection.Target.PinID)
-    })
-  })
-  
-  json.OutputPins.forEach(pin => {
-    data.outputs.push({ name: pin.Name, id: pin.ID })
-  })
-
-  return data
+function isBaseGate(name) {
+  return ['AND', 'OR', 'NOT', 'XOR'].includes(name)
 }
 
-function parse(data) {
-  const [input, and, or, not, xor, output] = [[],[],[],[],[],[]]
-  data.inputs.forEach(i => {
-    input.push(new INPUT(i.id))
+function buildChipRegistry(chip, dependancies, id=0, registry={}, connections=[]) {
+  const chipData = {}
+  const chipRegistry = registry
+  let connectionRegistry = connections
+  chipData.name = chip.Name
+  chipData.id = id
+  chipData.inputPins = chip.InputPins.map(pin => {
+    return `${chipData.id}-${pin.ID}`
+  })
+  chipData.outputPins = chip.OutputPins.map(pin => {
+    return `${chipData.id}-${pin.ID}`
   })
 
-  data.gates.forEach(gate => {
-    if(gate.name === "AND") and.push(new AND(gate.id, gate.name))
-    if(gate.name === "OR") or.push(new OR(gate.id, gate.name))
-    if(gate.name === "NOT") not.push(new NOT(gate.id, gate.name))
-    if(gate.name === "XOR") xor.push(new XOR(gate.id, gate.name))
+  chip.Connections.forEach(connection => {
+    let targetId
+    let sourceId
+    if(chipData.id != 0) {
+      sourceId = `${chipData.id}:${connection.Source.SubChipID}-${connection.Source.PinID}`
+      targetId = `${chipData.id}:${connection.Target.SubChipID}-${connection.Target.PinID}`
+      if(connection.Source.SubChipID == '0') {
+        sourceId = `${chipData.id}-${connection.Source.PinID}`
+      }
+      if(connection.Target.SubChipID == '0') {
+        targetId = `${chipData.id}-${connection.Target.PinID}`
+      }
+    } else {
+      sourceId = `${connection.Source.SubChipID}-${connection.Source.PinID}`
+      targetId = `${connection.Target.SubChipID}-${connection.Target.PinID}`
+
+    }
+    connectionRegistry.push(`${sourceId} > ${targetId}`)
   })
 
-  data.outputs.forEach(o => {
-    output.push(new OUTPUT(o.id))
+  chipData.children = chip.SubChips.map(chip => {
+    if(isBaseGate(chip.Name)) {
+      const chipid = (chipData.id != 0) ? `${chipData.id}:${chip.ID}` : chip.ID
+      const subChip = new BaseChip({ name: chip.Name, id: chipid, inputPins: [`${chipid}-0`, `${chipid}-1`], outputPins: [`${chipid}-2`] })
+      chipRegistry[chipid] = subChip
+      return subChip
+    } else {
+      const chipid = (chipData.id != 0) ? `${chipData.id}:${chip.ID}` : chip.ID
+      const subChip = buildChipRegistry(dependancies[chip.Name], dependancies, chipid, chipRegistry)
+      chipRegistry[chipid] = subChip.template
+      connectionRegistry = [...connectionRegistry, ...subChip.connectionRegistry]
+      return subChip
+    }
   })
-
-  return { input, and, or, not, xor, output} 
+  const template = new Chip(chipData)
+  return { template, chipRegistry, connectionRegistry }
 }
 
-function findGateWithId(gates, id) {
-  let output
-  function callback(gate) {
-    if(gate.id === id) {
-      output = gate
+function buildChannelRegistry(level, connectionRegistry) {
+  const channelRegistry = {}
+  const updatedConnections = [...connectionRegistry]
+
+  function updateChannelsForConnection(connection, channel) {
+    const pins = connection.split(" > ")
+    const source = pins[0]
+    const target = pins[1]
+
+    const index = updatedConnections.indexOf(connection)
+
+    if(!channelRegistry[source]) {
+      channelRegistry[source] = channel
+      updatedConnections[index] = 'channeled'
+      getAllConnectionsWith(updatedConnections, source).forEach((connection) => { updateChannelsForConnection(connection, channel)})
+    } 
+    if(!channelRegistry[target]) {
+      channelRegistry[target] = channel
+      updatedConnections[index] = 'channeled'
+      getAllConnectionsWith(updatedConnections, target).forEach((connection) => { updateChannelsForConnection(connection, channel)})
     }
   }
+
+  updatedConnections.forEach((connection, index) => {
+    if(connection != 'channeled') {
+      const pins = connection.split(" > ")
+      const source = pins[0]
+      const target = pins[1]
+      let channel
   
-  gates.input.forEach(callback)
-  gates.and.forEach(callback)
-  gates.or.forEach(callback)
-  gates.not.forEach(callback)
-  gates.xor.forEach(callback)
-  gates.output.forEach(callback)
+      if(channelRegistry[source]) {
+        channel = channelRegistry[source]
+        channelRegistry[target] = channelRegistry[source]
+      } else if(channelRegistry[target]) {
+        channel = channelRegistry[target]
+        channelRegistry[source] = channelRegistry[target]
+      } else {
+        channel = level.nextFreeChannel
+        level.useChannel(channel)
+        channelRegistry[source] = channel
+        channelRegistry[target] = channel
+      }
+  
+      updatedConnections[index] = 'channeled'
+      getAllConnectionsWith(updatedConnections, source).forEach((connection) => { updateChannelsForConnection(connection, channel)})
+      getAllConnectionsWith(updatedConnections, target).forEach((connection) => { updateChannelsForConnection(connection, channel)})
+    }
+  })
+  
+  return channelRegistry
+}
+
+function getAllConnectionsWith(connectionRegistry, pin) {
+  const output = []
+  connectionRegistry.forEach(connection => {
+    const pins = connection.split(" > ")
+    if(pins[0] == pin || pins[1] == pin) {
+      output.push(connection)
+    }
+  })
 
   return output
 }
 
-function generateLogicTree(gates, connections) {
-  tree = gates.output
-  
-  connections.forEach(connection => {
-    source = findGateWithId(gates, connection.from)
-    target = findGateWithId(gates, connection.to)
-    
-    if(target.input1 === null) {
-      target.input1 = source
-    } else {
-      target.input2 = source
+function addGates(level, sectionId, chipRegistry, channelRegistry) {
+  Object.values(chipRegistry).forEach(chip => {
+    if(isBaseGate(chip.name) && !chip.added) {
+      chip.inputChannel1 = channelRegistry[chip.inputPins[0]]
+      chip.inputChannel2 = channelRegistry[chip.inputPins[1]]
+      chip.outputChannel = channelRegistry[chip.outputPins[0]]
+      addGate(level, sectionId, chip)
     }
   })
-  
-  return tree
-}
-
-function setChannels(level, gate) {
-  if(!gate.isOutput) {
-    if(gate.outputChannel === -1) {
-      gate.outputChannel = level.nextFreeChannel
-      level.channelsUsed[gate.outputChannel] = gate.outputChannel
-    }
-  }
-  if(gate.input1 != null) {
-    setChannels(level, gate.input1)
-    gate.inputChannel1 = gate.input1.outputChannel
-  } 
-  if(gate.input2 != null)  {
-    setChannels(level, gate.input2)
-    gate.inputChannel2 = gate.input2.outputChannel
-  }
-}
-
-function generateGates(level, sectionId, gate) {
-  addGate(level, sectionId, gate)
-
-  if(gate.input1 != null) generateGates(level, sectionId, gate.input1)
-  if(gate.input2 != null) generateGates(level, sectionId, gate.input2)
 }
 
 function addGate(level, sectionId, gate) {
-  if(gate.name === "AND" && !gate.added) {
+  if(gate.name === "AND") {
     level.addAndGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
     gate.added = true
   }
-  if(gate.name === "OR" && !gate.added) {
+  if(gate.name === "OR") {
     level.addOrGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
     gate.added = true
   }
-  if(gate.name === "NOT" && !gate.added) {
+  if(gate.name === "NOT") {
     level.addNotGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, OutChannel1: gate.outputChannel })
     gate.added = true
   }
-  if(gate.name === "XOR" && !gate.added) {
+  if(gate.name === "XOR") {
     level.addXorGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
     gate.added = true
   }
 }
 
-function writeTreeToFile(tree, file) {
-  let json = JSON.stringify(tree, null, 2)
+function getIOChannels(connectionRegistry, channelRegistry) {
+  const input = []
+  const output = []
+  connectionRegistry.forEach(connection => {
+    const pins = connection.split(" > ")
+    const source = pins[0]
+    const target = pins[1]
 
-  fs.writeFileSync(file, json, 'utf8', (err) => {
-    if(err) throw err
-  }); 
-  console.log("file write successful")
+    if(source.split('-')[0] === '0') {
+      input.push(channelRegistry[source])
+    }
+    
+    if(target.split('-')[0] === '0') {
+      output.push(channelRegistry[target])
+    }
+  })
+  return { input, output }
 }
 
-function addGatesFromFile({ level, sectionId, filePath }) {
+function addGatesFromFile({ level, sectionId, filePath, dependancies }) {
   const json = readFile(filePath)
-  const data = reduce(json)
-  const gates = parse(data)
-  const tree = generateLogicTree(gates, data.connections)
-
-
-  const outputChannels = []
-  tree.forEach(output => {
-    setChannels(level, output)
-    generateGates(level, sectionId, output)
-    outputChannels.push(output.inputChannel1)
+  const dependancyJson = {}
+  Object.entries(dependancies).forEach(dependancy => {
+    dependancyJson[dependancy[0]] = readFile(dependancy[1])
   })
+  
+  let { chipRegistry, connectionRegistry }  = buildChipRegistry(json, dependancyJson)
 
-  const inputChannels = []
-  gates.input.forEach(input => {
-    inputChannels.push(input.outputChannel)
-  })
+  const channelRegistry = buildChannelRegistry(level, connectionRegistry)
 
-  return {
-    input: inputChannels,
-    output: outputChannels
-  }
+  addGates(level, sectionId, chipRegistry, channelRegistry)
+
+  const { input, output } = getIOChannels(connectionRegistry, channelRegistry)
+
+  return { input, output }
 }
-
-
 
 module.exports = { addGatesFromFile }
