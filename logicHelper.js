@@ -52,7 +52,12 @@ function buildChipRegistry(chip, dependancies, id=0, registry={}, connections=[]
   chipData.children = chip.SubChips.map(chip => {
     if(isBaseGate(chip.Name)) {
       const chipid = (chipData.id != 0) ? `${chipData.id}:${chip.ID}` : chip.ID
-      const subChip = new BaseChip({ name: chip.Name, id: chipid, inputPins: [`${chipid}-0`, `${chipid}-1`], outputPins: [`${chipid}-2`] })
+      let subChip
+      if(chip.Name == "NOT") {
+        subChip = new BaseChip({ name: chip.Name, id: chipid, inputPins: [`${chipid}-0`], outputPins: [`${chipid}-1`] })
+      } else {
+        subChip = new BaseChip({ name: chip.Name, id: chipid, inputPins: [`${chipid}-0`, `${chipid}-1`], outputPins: [`${chipid}-2`] })
+      }
       chipRegistry[chipid] = subChip
       return subChip
     } else {
@@ -143,6 +148,7 @@ function addGates(level, sectionId, chipRegistry, channelRegistry) {
 }
 
 function addGate(level, sectionId, gate) {
+  console.log(gate);
   if(gate.name === "AND") {
     level.addAndGate({ sectionId, x:0, y: 0, InChannel1: gate.inputChannel1, InChannel2: gate.inputChannel2, OutChannel1: gate.outputChannel })
     gate.added = true
@@ -170,11 +176,15 @@ function getIOChannels(connectionRegistry, channelRegistry) {
     const target = pins[1]
 
     if(source.split('-')[0] === '0') {
-      input.push(channelRegistry[source])
+      if(!input.includes(channelRegistry[source])) {
+        input.push(channelRegistry[source])
+      }
     }
     
     if(target.split('-')[0] === '0') {
-      output.push(channelRegistry[target])
+      if(!input.includes(channelRegistry[target])) {
+        output.push(channelRegistry[target])
+      }
     }
   })
   return { input, output }
@@ -189,7 +199,9 @@ function addGatesFromFile({ level, sectionId, filePath, dependancies }) {
   
   let { chipRegistry, connectionRegistry }  = buildChipRegistry(json, dependancyJson)
 
+  console.log(connectionRegistry);
   const channelRegistry = buildChannelRegistry(level, connectionRegistry)
+  console.log(channelRegistry);
 
   addGates(level, sectionId, chipRegistry, channelRegistry)
 
